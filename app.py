@@ -60,6 +60,7 @@ class Handler(BaseHTTPRequestHandler):
             self._json(404, {"error": "not found"})
 
     def do_POST(self):
+        # --- /trigger: Newsletter-Generator als Hintergrundprozess starten ---
         if self.path == "/trigger":
             try:
                 length = int(self.headers.get("Content-Length", 0))
@@ -80,35 +81,33 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, {"ok": True, "topic": topic})
             return
 
-        if self.path != "/send":
+        # --- /send: HTML-Newsletter direkt per Graph API verschicken ---
+        if self.path == "/send":
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+                body   = json.loads(self.rfile.read(length))
+            except Exception:
+                self._json(400, {"error": "invalid json"}); return
 
-    def do_POST(self):
-        if self.path != "/send":
-            self._json(404, {"error": "not found"})
+            if not WEBHOOK_TOKEN or body.get("token") != WEBHOOK_TOKEN:
+                self._json(401, {"error": "unauthorized"}); return
+
+            to      = body.get("to", "")
+            subject = body.get("subject", "")
+            html    = body.get("html", "")
+            if not all([to, subject, html]):
+                self._json(400, {"error": "missing: to, subject, html"}); return
+
+            try:
+                send_mail(to, subject, html)
+                print(f"[OK] Gesendet: {subject!r} → {to}", flush=True)
+                self._json(200, {"ok": True})
+            except Exception as e:
+                print(f"[ERR] {e}", flush=True)
+                self._json(500, {"error": str(e)})
             return
 
-        try:
-            length = int(self.headers.get("Content-Length", 0))
-            body   = json.loads(self.rfile.read(length))
-        except Exception:
-            self._json(400, {"error": "invalid json"}); return
-
-        if not WEBHOOK_TOKEN or body.get("token") != WEBHOOK_TOKEN:
-            self._json(401, {"error": "unauthorized"}); return
-
-        to      = body.get("to", "")
-        subject = body.get("subject", "")
-        html    = body.get("html", "")
-        if not all([to, subject, html]):
-            self._json(400, {"error": "missing: to, subject, html"}); return
-
-        try:
-            send_mail(to, subject, html)
-            print(f"[OK] Gesendet: {subject!r} → {to}", flush=True)
-            self._json(200, {"ok": True})
-        except Exception as e:
-            print(f"[ERR] {e}", flush=True)
-            self._json(500, {"error": str(e)})
+        self._json(404, {"error": "not found"})
 
     def _json(self, code: int, data: dict):
         body = json.dumps(data).encode()
