@@ -44,7 +44,7 @@ TOPICS = {
             "digitale souveränität", "europäische cloud", "open source", "vendor lock",
             "datenspeicherung", "datenweitergabe", "schrems", "netzpolitik",
         ],
-        # Deutschsprachige Quellen zuerst — EU-Fokus
+        # Ausschließlich deutschsprachige Quellen — EU-Fokus
         "feeds": [
             ("de", "https://netzpolitik.org/feed/"),                    # DE – beste Quelle für DS
             ("de", "https://www.heise.de/security/news-atom.xml"),      # DE
@@ -52,7 +52,6 @@ TOPICS = {
             ("de", "https://www.spiegel.de/netzwelt/index.rss"),        # DE
             ("de", "https://www.sueddeutsche.de/rss/netzwelt"),         # DE
             ("de", "https://www.tagesschau.de/xml/rss2/"),              # DE – breite Abdeckung
-            ("en", "https://noyb.eu/en/rss.xml"),                       # EN – EU Privacy, Fallback
         ],
     },
     "ki": {
