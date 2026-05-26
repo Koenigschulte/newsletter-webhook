@@ -5,6 +5,8 @@ Empfängt HTML-Newsletter von Claude Remote-Agents und sendet sie per MS Graph A
 """
 import os
 import json
+import subprocess
+import threading
 import urllib.request
 import urllib.parse
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -58,8 +60,32 @@ class Handler(BaseHTTPRequestHandler):
             self._json(404, {"error": "not found"})
 
     def do_POST(self):
+        if self.path == "/trigger":
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+                body   = json.loads(self.rfile.read(length))
+            except Exception:
+                self._json(400, {"error": "invalid json"}); return
+
+            if not WEBHOOK_TOKEN or body.get("token") != WEBHOOK_TOKEN:
+                self._json(401, {"error": "unauthorized"}); return
+
+            topic = body.get("topic", "")
+            if topic not in ("ds", "ki"):
+                self._json(400, {"error": "topic must be ds or ki"}); return
+
+            def run():
+                subprocess.run(["python3", "/app/newsletter-generator.py", topic])
+            threading.Thread(target=run, daemon=True).start()
+            self._json(200, {"ok": True, "topic": topic})
+            return
+
         if self.path != "/send":
-            self._json(404, {"error": "not found"}); return
+
+    def do_POST(self):
+        if self.path != "/send":
+            self._json(404, {"error": "not found"})
+            return
 
         try:
             length = int(self.headers.get("Content-Length", 0))
