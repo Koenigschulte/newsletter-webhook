@@ -40,14 +40,19 @@ TOPICS = {
             "palantir", "gaia-x", "cloud act", "surveillance", "überwachung",
             "digital rights", "eu ai act", "big tech", "whistleblow", "nsa",
             "geheimdienst", "datenpanne", "datenleck", "digitalgesetz", "dma", "dsa",
+            "microsoft", "amazon", "google", "meta", "apple", "us-konzern",
+            "digitale souveränität", "europäische cloud", "open source", "vendor lock",
+            "datenspeicherung", "datenweitergabe", "schrems", "netzpolitik",
         ],
+        # Deutschsprachige Quellen zuerst — EU-Fokus
         "feeds": [
-            "https://noyb.eu/en/rss.xml",
-            "https://edri.org/feed/",
-            "https://www.heise.de/security/news-atom.xml",
-            "https://www.spiegel.de/netzwelt/index.rss",
-            "https://www.golem.de/rss.php",
-            "https://www.sueddeutsche.de/rss/netzwelt",
+            ("de", "https://netzpolitik.org/feed/"),                    # DE – beste Quelle für DS
+            ("de", "https://www.heise.de/security/news-atom.xml"),      # DE
+            ("de", "https://www.golem.de/rss.php"),                     # DE
+            ("de", "https://www.spiegel.de/netzwelt/index.rss"),        # DE
+            ("de", "https://www.sueddeutsche.de/rss/netzwelt"),         # DE
+            ("de", "https://www.tagesschau.de/xml/rss2/"),              # DE – breite Abdeckung
+            ("en", "https://noyb.eu/en/rss.xml"),                       # EN – EU Privacy, Fallback
         ],
     },
     "ki": {
@@ -60,14 +65,19 @@ TOPICS = {
             "llm", "gpt", "claude", "gemini", "copilot", "chatbot", "openai",
             "anthropic", "deep learning", "sprachmodell", "language model",
             "eu ai act", "roboter", "automation", "algorithmus", "machine learning",
-            "ki-modell", "generative", "transformer",
+            "ki-modell", "generative", "transformer", "nvidia", "deepseek",
+            "openai", "mistral", "meta llama", "ki-regulierung", "ki-gesetz",
+            "china", "usa", "silicon valley", "sam altman", "elon musk",
         ],
+        # Deutschsprachige Quellen — berichten auf Deutsch über EU, USA und China
         "feeds": [
-            "https://mixed.de/feed/",
-            "https://t3n.de/tag/kuenstliche-intelligenz/feed/",
-            "https://www.heise.de/news-atom.xml",
-            "https://www.golem.de/rss.php",
-            "https://www.spiegel.de/netzwelt/index.rss",
+            ("de", "https://t3n.de/tag/kuenstliche-intelligenz/feed/"), # DE – KI-Fokus
+            ("de", "https://www.heise.de/news-atom.xml"),               # DE – breite Technik
+            ("de", "https://www.golem.de/rss.php"),                     # DE
+            ("de", "https://mixed.de/feed/"),                           # DE – KI/XR
+            ("de", "https://www.spiegel.de/netzwelt/index.rss"),        # DE
+            ("de", "https://www.tagesschau.de/xml/rss2/"),              # DE – intl. KI-News auf DE
+            ("de", "https://netzpolitik.org/feed/"),                    # DE – KI-Regulierung EU
         ],
     },
 }
@@ -114,6 +124,20 @@ def strip_tags(html):
     """Entfernt HTML-Tags."""
     import re
     return re.sub(r"<[^>]+>", "", html).strip()
+
+
+def is_german(article):
+    """Prüft ob Artikel auf Deutsch ist (Umlaute oder typische deutsche Wörter)."""
+    text = article["title"] + " " + article["summary"]
+    german_chars = set("äöüÄÖÜß")
+    if any(c in german_chars for c in text):
+        return True
+    # Typische deutsche Funktionswörter
+    words = set(text.lower().split())
+    german_words = {"der", "die", "das", "und", "ist", "für", "von", "mit",
+                    "bei", "auf", "des", "dem", "den", "wird", "hat", "auch",
+                    "sich", "nach", "eine", "einen", "oder", "nicht", "wie"}
+    return len(words & german_words) >= 2
 
 
 def is_relevant(article, keywords):
@@ -217,25 +241,34 @@ def main():
         log("FEHLER: NEWSLETTER_WEBHOOK_TOKEN nicht gesetzt")
         sys.exit(1)
 
-    # Artikel sammeln
-    all_articles = []
-    for feed_url in cfg["feeds"]:
-        log(f"  Lade: {feed_url}")
+    # Artikel sammeln — getrennt nach Sprache
+    german_articles = []
+    english_articles = []
+
+    for lang, feed_url in cfg["feeds"]:
+        log(f"  Lade [{lang.upper()}]: {feed_url}")
         articles = fetch_feed(feed_url)
         relevant = [a for a in articles if is_relevant(a, cfg["keywords"])]
         log(f"  → {len(articles)} Artikel, {len(relevant)} relevant")
-        all_articles.extend(relevant)
+        for a in relevant:
+            if lang == "de" or is_german(a):
+                german_articles.append(a)
+            else:
+                english_articles.append(a)
+
+    # Deutsche Artikel zuerst, englische nur als Lückenfüller
+    combined = german_articles + english_articles
 
     # Deduplizieren (nach Link)
     seen = set()
     unique = []
-    for a in all_articles:
+    for a in combined:
         if a["link"] not in seen:
             seen.add(a["link"])
             unique.append(a)
 
     top = unique[:MAX_ARTICLES]
-    log(f"  Gesamt: {len(unique)} relevante Artikel, nehme {len(top)}")
+    log(f"  Gesamt: {len(unique)} relevante Artikel ({len(german_articles)} DE / {len(english_articles)} EN), nehme {len(top)}")
 
     if not top:
         log("WARNUNG: Keine relevanten Artikel gefunden — Newsletter wird nicht gesendet")
