@@ -1,36 +1,50 @@
 #!/usr/bin/env python3
 """
 Newsletter Webhook Server
-Empfängt HTML-Newsletter von Claude Remote-Agents und sendet sie per SMTP (M365).
+Empfängt HTML-Newsletter von Claude Remote-Agents und sendet sie per MS Graph API.
 """
 import os
 import json
-import smtplib
-import ssl
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
+import urllib.request
+import urllib.parse
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 WEBHOOK_TOKEN = os.environ.get("NEWSLETTER_WEBHOOK_TOKEN", "")
-SMTP_HOST     = "smtp.office365.com"
-SMTP_PORT     = 587
-SMTP_USER     = os.environ.get("SMTP_USER", "alexander@koeschu.com")
-SMTP_PASS     = os.environ.get("SMTP_PASS", "")
+TENANT_ID     = os.environ.get("AZURE_TENANT_ID", "cb1ac70c-fe3c-4094-a440-1f2f407f820c")
+CLIENT_ID     = os.environ.get("AZURE_CLIENT_ID", "")
+CLIENT_SECRET = os.environ.get("AZURE_CLIENT_SECRET", "")
+SENDER        = "alexander@koeschu.com"
+
+
+def get_access_token() -> str:
+    url  = f"https://login.microsoftonline.com/{TENANT_ID}/oauth2/v2.0/token"
+    data = urllib.parse.urlencode({
+        "grant_type":    "client_credentials",
+        "client_id":     CLIENT_ID,
+        "client_secret": CLIENT_SECRET,
+        "scope":         "https://graph.microsoft.com/.default",
+    }).encode()
+    req = urllib.request.Request(url, data=data, method="POST")
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read())["access_token"]
 
 
 def send_mail(to: str, subject: str, html: str) -> None:
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"]    = SMTP_USER
-    msg["To"]      = to
-    msg.attach(MIMEText(html, "html", "utf-8"))
-
-    context = ssl.create_default_context()
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as smtp:
-        smtp.ehlo()
-        smtp.starttls(context=context)
-        smtp.login(SMTP_USER, SMTP_PASS)
-        smtp.sendmail(SMTP_USER, to, msg.as_bytes())
+    token   = get_access_token()
+    url     = f"https://graph.microsoft.com/v1.0/users/{SENDER}/sendMail"
+    payload = json.dumps({
+        "message": {
+            "subject": subject,
+            "body": {"contentType": "HTML", "content": html},
+            "toRecipients": [{"emailAddress": {"address": to}}],
+        }
+    }).encode()
+    req = urllib.request.Request(url, data=payload, method="POST")
+    req.add_header("Authorization", f"Bearer {token}")
+    req.add_header("Content-Type", "application/json")
+    with urllib.request.urlopen(req) as resp:
+        if resp.status not in (200, 202):
+            raise RuntimeError(f"Graph API Fehler: {resp.status}")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -81,5 +95,5 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
-    print(f"Newsletter Webhook (SMTP/M365) läuft auf Port {port}", flush=True)
+    print(f"Newsletter Webhook (MS Graph) läuft auf Port {port}", flush=True)
     HTTPServer(("0.0.0.0", port), Handler).serve_forever()
