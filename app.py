@@ -55,7 +55,34 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/health":
-            self._json(200, {"ok": True})
+            import os
+            self._json(200, {
+                "ok": True,
+                "anthropic_key_set": bool(os.environ.get("ANTHROPIC_API_KEY", "")),
+                "azure_client_id_set": bool(CLIENT_ID),
+            })
+        elif self.path == "/test-translate":
+            # Testet ob die Anthropic API erreichbar ist
+            import os, urllib.request, urllib.parse
+            key = os.environ.get("ANTHROPIC_API_KEY", "")
+            if not key:
+                self._json(500, {"error": "ANTHROPIC_API_KEY nicht gesetzt"}); return
+            try:
+                payload = json.dumps({
+                    "model": "claude-3-5-haiku-20241022",
+                    "max_tokens": 100,
+                    "messages": [{"role": "user", "content": "Übersetze ins Deutsche: 'Hello World'. Antworte nur mit der Übersetzung."}],
+                }).encode()
+                req = urllib.request.Request("https://api.anthropic.com/v1/messages", data=payload, method="POST")
+                req.add_header("x-api-key", key)
+                req.add_header("anthropic-version", "2023-06-01")
+                req.add_header("Content-Type", "application/json")
+                with urllib.request.urlopen(req, timeout=15) as r:
+                    resp = json.loads(r.read())
+                    result = resp["content"][0]["text"]
+                self._json(200, {"ok": True, "result": result})
+            except Exception as e:
+                self._json(500, {"error": str(e)})
         else:
             self._json(404, {"error": "not found"})
 

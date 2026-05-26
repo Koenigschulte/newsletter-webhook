@@ -105,7 +105,7 @@ def fetch_feed(url):
             pub = entry.findtext("atom:published", "", ns) or entry.findtext("atom:updated", "", ns) or ""
             if title and link:
                 articles.append({"title": unescape(title), "link": link,
-                                  "summary": unescape(strip_tags(summary))[:400], "pub": pub[:10]})
+                                  "summary": unescape(strip_tags(summary))[:1200], "pub": pub[:10]})
 
         # RSS-Format
         for item in root.findall(".//item"):
@@ -115,7 +115,7 @@ def fetch_feed(url):
             pub   = item.findtext("pubDate", "")[:16]
             if title and link:
                 articles.append({"title": unescape(title), "link": link,
-                                  "summary": unescape(strip_tags(desc))[:400], "pub": pub})
+                                  "summary": unescape(strip_tags(desc))[:1200], "pub": pub})
         return articles
     except Exception as e:
         log(f"  Feed-Fehler {url}: {e}")
@@ -148,13 +148,13 @@ def translate_to_german(title, summary):
         return title, summary
     try:
         prompt = (
-            f"Übersetze folgendes ins Deutsche. Antworte NUR mit JSON: "
+            f"Übersetze folgendes ins Deutsche. Antworte NUR mit JSON, kein Text davor oder danach: "
             f'{{\"title\": \"...\", \"summary\": \"...\"}}\n\n'
             f"Titel: {title}\nZusammenfassung: {summary}"
         )
         payload = json.dumps({
-            "model": "claude-haiku-4-5",
-            "max_tokens": 400,
+            "model": "claude-3-5-haiku-20241022",
+            "max_tokens": 600,
             "messages": [{"role": "user", "content": prompt}],
         }).encode()
         req = urllib.request.Request(
@@ -173,7 +173,7 @@ def translate_to_german(title, summary):
             data  = json.loads(text[start:end])
             return data.get("title", title), data.get("summary", summary)
     except Exception as e:
-        log(f"  Übersetzung fehlgeschlagen: {e}")
+        log(f"  ÜBERSETZUNG FEHLER ({type(e).__name__}): {e}")
         return title, summary
 
 
