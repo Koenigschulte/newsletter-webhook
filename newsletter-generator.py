@@ -288,13 +288,13 @@ def main():
         relevant = [a for a in articles if is_relevant(a, cfg["keywords"])]
         log(f"  → {len(articles)} Artikel, {len(relevant)} relevant")
         for a in relevant:
-            if lang == "de" or is_german(a):
+            if is_german(a):
                 german_articles.append(a)
             else:
-                # Englischen Artikel übersetzen bevor er in den Newsletter kommt
-                log(f"    Übersetze: {a['title'][:60]}…")
+                # Artikel ist Englisch (egal welcher Feed) → übersetzen
+                log(f"    Übersetze [{lang.upper()}]: {a['title'][:60]}…")
                 a["title"], a["summary"] = translate_to_german(a["title"], a["summary"])
-                german_articles.append(a)  # nach Übersetzung wie deutsch behandeln
+                german_articles.append(a)
 
     # Deutsche Artikel zuerst, englische nur als Lückenfüller
     combined = german_articles + english_articles
