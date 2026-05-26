@@ -69,7 +69,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(500, {"error": "ANTHROPIC_API_KEY nicht gesetzt"}); return
             try:
                 payload = json.dumps({
-                    "model": "claude-3-5-haiku-20241022",
+                    "model": "claude-3-haiku-20240307",
                     "max_tokens": 100,
                     "messages": [{"role": "user", "content": "Übersetze ins Deutsche: 'Hello World'. Antworte nur mit der Übersetzung."}],
                 }).encode()
@@ -81,6 +81,9 @@ class Handler(BaseHTTPRequestHandler):
                     resp = json.loads(r.read())
                     result = resp["content"][0]["text"]
                 self._json(200, {"ok": True, "result": result})
+            except urllib.error.HTTPError as e:
+                body = e.read().decode()
+                self._json(500, {"error": str(e), "detail": body})
             except Exception as e:
                 self._json(500, {"error": str(e)})
         else:
