@@ -11,12 +11,13 @@ from html import unescape
 
 # ── Konfiguration ────────────────────────────────────────────────────────────
 
-WEBHOOK_URL   = "https://newsletter.koeschu.com/send"
-WEBHOOK_TOKEN = os.environ.get("NEWSLETTER_WEBHOOK_TOKEN", "")
-RECIPIENT     = "alexander@koeschu.com"
-MAX_ARTICLES  = 5
-TIMEOUT       = 15
-LOG           = "/var/log/newsletter.log"
+WEBHOOK_URL     = "https://newsletter.koeschu.com/send"
+WEBHOOK_TOKEN   = os.environ.get("NEWSLETTER_WEBHOOK_TOKEN", "")
+ANTHROPIC_KEY   = os.environ.get("ANTHROPIC_API_KEY", "")
+RECIPIENT       = "alexander@koeschu.com"
+MAX_ARTICLES    = 5
+TIMEOUT         = 15
+LOG             = "/var/log/newsletter.log"
 
 # Secrets aus /etc/secrets.env laden (falls Token nicht als Env-Var gesetzt)
 if not WEBHOOK_TOKEN:
@@ -44,7 +45,7 @@ TOPICS = {
             "digitale souveränität", "europäische cloud", "open source", "vendor lock",
             "datenspeicherung", "datenweitergabe", "schrems", "netzpolitik",
         ],
-        # Ausschließlich deutschsprachige Quellen — EU-Fokus
+        # DE-Quellen + EN-Quellen (werden automatisch übersetzt)
         "feeds": [
             ("de", "https://netzpolitik.org/feed/"),                    # DE – beste Quelle für DS
             ("de", "https://www.heise.de/security/news-atom.xml"),      # DE
@@ -52,6 +53,8 @@ TOPICS = {
             ("de", "https://www.spiegel.de/netzwelt/index.rss"),        # DE
             ("de", "https://www.sueddeutsche.de/rss/netzwelt"),         # DE
             ("de", "https://www.tagesschau.de/xml/rss2/"),              # DE – breite Abdeckung
+            ("en", "https://noyb.eu/en/rss.xml"),                       # EN – EU Privacy → wird übersetzt
+            ("en", "https://edri.org/feed/"),                           # EN – EU Digital Rights → wird übersetzt
         ],
     },
     "ki": {
@@ -137,6 +140,41 @@ def is_german(article):
                     "bei", "auf", "des", "dem", "den", "wird", "hat", "auch",
                     "sich", "nach", "eine", "einen", "oder", "nicht", "wie"}
     return len(words & german_words) >= 2
+
+
+def translate_to_german(title, summary):
+    """Übersetzt Titel und Zusammenfassung ins Deutsche via Claude Haiku."""
+    if not ANTHROPIC_KEY:
+        return title, summary
+    try:
+        prompt = (
+            f"Übersetze folgendes ins Deutsche. Antworte NUR mit JSON: "
+            f'{{\"title\": \"...\", \"summary\": \"...\"}}\n\n'
+            f"Titel: {title}\nZusammenfassung: {summary}"
+        )
+        payload = json.dumps({
+            "model": "claude-haiku-4-5",
+            "max_tokens": 400,
+            "messages": [{"role": "user", "content": prompt}],
+        }).encode()
+        req = urllib.request.Request(
+            "https://api.anthropic.com/v1/messages",
+            data=payload, method="POST"
+        )
+        req.add_header("x-api-key", ANTHROPIC_KEY)
+        req.add_header("anthropic-version", "2023-06-01")
+        req.add_header("Content-Type", "application/json")
+        with urllib.request.urlopen(req, timeout=20) as r:
+            resp = json.loads(r.read())
+            text = resp["content"][0]["text"].strip()
+            # JSON aus Antwort extrahieren
+            start = text.find("{")
+            end   = text.rfind("}") + 1
+            data  = json.loads(text[start:end])
+            return data.get("title", title), data.get("summary", summary)
+    except Exception as e:
+        log(f"  Übersetzung fehlgeschlagen: {e}")
+        return title, summary
 
 
 def is_relevant(article, keywords):
@@ -253,7 +291,10 @@ def main():
             if lang == "de" or is_german(a):
                 german_articles.append(a)
             else:
-                english_articles.append(a)
+                # Englischen Artikel übersetzen bevor er in den Newsletter kommt
+                log(f"    Übersetze: {a['title'][:60]}…")
+                a["title"], a["summary"] = translate_to_german(a["title"], a["summary"])
+                german_articles.append(a)  # nach Übersetzung wie deutsch behandeln
 
     # Deutsche Artikel zuerst, englische nur als Lückenfüller
     combined = german_articles + english_articles
