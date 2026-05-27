@@ -196,21 +196,14 @@ def is_relevant(article, keywords):
     return full_matches >= 2
 
 
-def translate_to_german(title, summary):
-    """Übersetzt Titel und Zusammenfassung ins Deutsche via Claude."""
+def call_claude(prompt, max_tokens=600):
+    """Ruft Claude API auf und gibt Antworttext zurück."""
     if not ANTHROPIC_KEY:
-        log("  Übersetzung: ANTHROPIC_API_KEY nicht gesetzt")
-        return title, summary
+        return None
     try:
-        prompt = (
-            f"Übersetze ins Deutsche. Antworte NUR in diesem exakten Format:\n"
-            f"TITEL: [übersetzter Titel]\n"
-            f"TEXT: [übersetzte Zusammenfassung]\n\n"
-            f"Titel: {title}\nText: {summary}"
-        )
         payload = json.dumps({
             "model": "claude-haiku-4-5",
-            "max_tokens": 800,
+            "max_tokens": max_tokens,
             "messages": [{"role": "user", "content": prompt}],
         }).encode()
         req = urllib.request.Request("https://api.anthropic.com/v1/messages", data=payload, method="POST")
@@ -219,16 +212,48 @@ def translate_to_german(title, summary):
         req.add_header("Content-Type", "application/json")
         with urllib.request.urlopen(req, timeout=20) as r:
             resp = json.loads(r.read())
-            text = resp["content"][0]["text"].strip()
-            t_match = re.search(r"TITEL:\s*(.+)", text)
-            s_match = re.search(r"TEXT:\s*([\s\S]+)", text)
-            new_title   = t_match.group(1).strip() if t_match else title
-            new_summary = s_match.group(1).strip() if s_match else summary
-            log(f"  ✓ Übersetzt: {new_title[:60]}")
-            return new_title, new_summary
+            return resp["content"][0]["text"].strip()
     except Exception as e:
-        log(f"  ÜBERSETZUNG FEHLER ({type(e).__name__}): {e}")
+        log(f"  Claude API Fehler ({type(e).__name__}): {e}")
+        return None
+
+
+def expand_summary(title, summary, topic_context):
+    """Schreibt eine ausführliche deutsche Zusammenfassung (4-5 Sätze)."""
+    prompt = (
+        f"Du schreibst einen Newsletter über {topic_context}.\n"
+        f"Schreibe eine ausführliche deutsche Zusammenfassung (4-5 vollständige Sätze) für diesen Artikel.\n"
+        f"Erkläre den Kontext, die Bedeutung und die Relevanz für das Thema.\n"
+        f"Antworte NUR mit der Zusammenfassung, kein Titel, keine Einleitung.\n\n"
+        f"Titel: {title}\n"
+        f"Verfügbarer Text: {summary}"
+    )
+    result = call_claude(prompt, max_tokens=500)
+    if result:
+        log(f"  ✓ Zusammenfassung erweitert: {len(result)} Zeichen")
+    return result or summary
+
+
+def translate_to_german(title, summary):
+    """Übersetzt Titel und Zusammenfassung ins Deutsche via Claude."""
+    if not ANTHROPIC_KEY:
+        log("  Übersetzung: ANTHROPIC_API_KEY nicht gesetzt")
         return title, summary
+    prompt = (
+        f"Übersetze ins Deutsche. Antworte NUR in diesem exakten Format:\n"
+        f"TITEL: [übersetzter Titel]\n"
+        f"TEXT: [übersetzte Zusammenfassung]\n\n"
+        f"Titel: {title}\nText: {summary}"
+    )
+    result = call_claude(prompt, max_tokens=800)
+    if result:
+        t_match = re.search(r"TITEL:\s*(.+)", result)
+        s_match = re.search(r"TEXT:\s*([\s\S]+)", result)
+        new_title   = t_match.group(1).strip() if t_match else title
+        new_summary = s_match.group(1).strip() if s_match else summary
+        log(f"  ✓ Übersetzt: {new_title[:60]}")
+        return new_title, new_summary
+    return title, summary
 
 
 # ── HTML-Builder ─────────────────────────────────────────────────────────────
@@ -363,6 +388,13 @@ def main():
 
     top = unique[:MAX_ARTICLES]
     log(f"  Gesamt: {len(unique)} Artikel, nehme {len(top)}")
+
+    # Zusammenfassungen mit Claude ausführlich ausformulieren
+    if ANTHROPIC_KEY:
+        topic_context = "digitale Souveränität, Datenschutz und EU-Regulierung" if topic == "ds" else "Künstliche Intelligenz, LLMs und KI-Entwicklungen"
+        for a in top:
+            log(f"  Erweitere Zusammenfassung: {a['title'][:50]}…")
+            a["summary"] = expand_summary(a["title"], a["summary"], topic_context)
 
     if not top:
         log("WARNUNG: Keine relevanten Artikel gefunden")
