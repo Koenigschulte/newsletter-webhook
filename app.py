@@ -86,6 +86,30 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(500, {"error": str(e), "detail": body})
             except Exception as e:
                 self._json(500, {"error": str(e)})
+        elif self.path in ("/preview/ds", "/preview/ki"):
+            topic = self.path.split("/")[-1]
+            # Token-Auth via Query-Parameter: /preview/ds?token=...
+            token_param = ""
+            if "?" in self.path:
+                qs = self.path.split("?", 1)[1]
+                for part in qs.split("&"):
+                    if part.startswith("token="):
+                        token_param = part[6:]
+            if not WEBHOOK_TOKEN or token_param != WEBHOOK_TOKEN:
+                self._json(401, {"error": "unauthorized"}); return
+            try:
+                import subprocess as sp
+                result = sp.run(
+                    ["python3", "/app/newsletter-generator.py", topic, "--dry-run"],
+                    capture_output=True, text=True, timeout=120
+                )
+                output = result.stdout.strip()
+                if output:
+                    self._json(200, json.loads(output))
+                else:
+                    self._json(500, {"error": result.stderr[-500:] if result.stderr else "no output"})
+            except Exception as e:
+                self._json(500, {"error": str(e)})
         else:
             self._json(404, {"error": "not found"})
 
