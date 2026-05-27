@@ -181,19 +181,23 @@ def is_german(article):
 
 
 BLOCKLIST = ["anzeige:", "sponsored:", "werbung:", "advertisement:", "deals:", "angebot:"]
+PAYWALL   = ["(g+)", "⊕", "[premium]", "[+]"]
 
 def is_relevant(article, keywords):
     title_lower = article["title"].lower()
     # Werbeanzeigen rausfiltern
     if any(title_lower.startswith(bl) for bl in BLOCKLIST):
         return False
-    # Mindestens 1 Keyword im Titel ODER 2+ Keywords im Gesamttext
+    # Bezahlartikel rausfiltern
+    if any(pw in title_lower for pw in PAYWALL):
+        return False
+    # Mindestens 1 Keyword im Titel ODER 3+ Keywords im Gesamttext
     title_matches = sum(1 for kw in keywords if kw in title_lower)
     if title_matches >= 1:
         return True
     full_text = (article["title"] + " " + article["summary"]).lower()
     full_matches = sum(1 for kw in keywords if kw in full_text)
-    return full_matches >= 2
+    return full_matches >= 3
 
 
 def call_claude(prompt, max_tokens=600):
@@ -218,11 +222,18 @@ def call_claude(prompt, max_tokens=600):
         return None
 
 
+def clean_md(text):
+    """Entfernt Markdown-Formatierung (**, *, __) aus Claude-Antworten."""
+    text = re.sub(r'\*+', '', text)
+    text = re.sub(r'__', '', text)
+    return text.strip()
+
+
 def enrich_article(title, summary, topic_context):
     """Erstellt Zusammenfassung, Erkenntnis und Problem auf Deutsch via Claude."""
     prompt = (
         f"Du schreibst einen knappen Newsletter über {topic_context}.\n"
-        f"Antworte NUR in diesem exakten Format — jeder Abschnitt max. 2 Sätze:\n\n"
+        f"Antworte NUR in diesem exakten Format ohne Markdown-Formatierung — jeder Abschnitt max. 2 Sätze:\n\n"
         f"ZUSAMMENFASSUNG: [Was ist passiert? Kurz und klar.]\n"
         f"ERKENNTNIS: [Die wichtigste Schlussfolgerung für den Leser.]\n"
         f"PROBLEM: [Das konkrete Risiko oder Problem dahinter.]\n\n"
@@ -237,9 +248,9 @@ def enrich_article(title, summary, topic_context):
     p = re.search(r"PROBLEM:\s*([\s\S]+?)$", result)
     log(f"  ✓ Artikel angereichert: {title[:50]}")
     return {
-        "zusammenfassung": z.group(1).strip() if z else summary,
-        "erkenntnis":      e.group(1).strip() if e else "",
-        "problem":         p.group(1).strip() if p else "",
+        "zusammenfassung": clean_md(z.group(1).strip()) if z else summary,
+        "erkenntnis":      clean_md(e.group(1).strip()) if e else "",
+        "problem":         clean_md(p.group(1).strip()) if p else "",
     }
 
 
