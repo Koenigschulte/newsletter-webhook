@@ -221,13 +221,13 @@ def call_claude(prompt, max_tokens=600):
 def enrich_article(title, summary, topic_context):
     """Erstellt Zusammenfassung, Erkenntnis und Problem auf Deutsch via Claude."""
     prompt = (
-        f"Du schreibst einen Newsletter über {topic_context}.\n"
-        f"Analysiere diesen Artikel und antworte NUR in diesem exakten Format:\n\n"
-        f"ZUSAMMENFASSUNG: [4-5 Sätze: Was ist passiert? Wer ist beteiligt? Welche Details sind wichtig?]\n"
-        f"ERKENNTNIS: [2-3 Sätze: Was bedeutet das strategisch? Was sollte der Leser mitnehmen?]\n"
-        f"PROBLEM: [2-3 Sätze: Welches konkrete Problem oder Risiko steckt dahinter?]\n\n"
+        f"Du schreibst einen knappen Newsletter über {topic_context}.\n"
+        f"Antworte NUR in diesem exakten Format — jeder Abschnitt max. 2 Sätze:\n\n"
+        f"ZUSAMMENFASSUNG: [Was ist passiert? Kurz und klar.]\n"
+        f"ERKENNTNIS: [Die wichtigste Schlussfolgerung für den Leser.]\n"
+        f"PROBLEM: [Das konkrete Risiko oder Problem dahinter.]\n\n"
         f"Titel: {title}\n"
-        f"Verfügbarer Text: {summary}"
+        f"Text: {summary}"
     )
     result = call_claude(prompt, max_tokens=700)
     if not result:
