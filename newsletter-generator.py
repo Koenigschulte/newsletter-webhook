@@ -183,7 +183,24 @@ def is_german(article):
 BLOCKLIST = ["anzeige:", "sponsored:", "werbung:", "advertisement:", "deals:", "angebot:"]
 PAYWALL   = ["(g+)", "⊕", "[premium]", "[+]"]
 
-def is_relevant(article, keywords):
+# Kern-Keywords: mindestens eines muss im Volltext stehen wenn kein Keyword im Titel
+CORE_KW = {
+    "ds": {
+        "souveränität", "sovereignty", "dsgvo", "gdpr", "datenschutz", "privacy",
+        "datenpanne", "datenleck", "überwachung", "surveillance", "digital rights",
+        "cloud act", "whistleblow", "schrems", "datenspeicherung", "datenweitergabe",
+        "digitalgesetz", "dma", "dsa", "noyb", "vendor lock", "gaia-x",
+        "datenschutzbehörde", "datenschutzbeauftragter", "datenschutzrecht",
+    },
+    "ki": {
+        "künstliche intelligenz", "artificial intelligence", "llm", "gpt", "claude",
+        "gemini", "openai", "anthropic", "deep learning", "sprachmodell",
+        "language model", "ki-modell", "generative", "transformer", "machine learning",
+        "eu ai act", "ki-regulierung", "ki-gesetz", "chatbot", "deepseek", "mistral",
+    },
+}
+
+def is_relevant(article, keywords, topic=""):
     title_lower = article["title"].lower()
     # Werbeanzeigen rausfiltern
     if any(title_lower.startswith(bl) for bl in BLOCKLIST):
@@ -191,13 +208,17 @@ def is_relevant(article, keywords):
     # Bezahlartikel rausfiltern
     if any(pw in title_lower for pw in PAYWALL):
         return False
-    # Mindestens 1 Keyword im Titel ODER 3+ Keywords im Gesamttext
+    # Mindestens 1 Keyword im Titel → direkt relevant
     title_matches = sum(1 for kw in keywords if kw in title_lower)
     if title_matches >= 1:
         return True
+    # Kein Titel-Match: 3+ Keywords im Volltext UND mindestens ein Core-Keyword
     full_text = (article["title"] + " " + article["summary"]).lower()
     full_matches = sum(1 for kw in keywords if kw in full_text)
-    return full_matches >= 3
+    if full_matches < 3:
+        return False
+    core = CORE_KW.get(topic, set())
+    return any(ck in full_text for ck in core)
 
 
 def call_claude(prompt, max_tokens=600):
@@ -400,7 +421,7 @@ def main():
     for lang, feed_url in cfg["feeds"]:
         log(f"  Lade [{lang.upper()}]: {feed_url}")
         articles = fetch_feed(feed_url)
-        relevant = [a for a in articles if is_relevant(a, cfg["keywords"]) and is_recent(a.get("pub_raw", ""))]
+        relevant = [a for a in articles if is_relevant(a, cfg["keywords"], topic) and is_recent(a.get("pub_raw", ""))]
         log(f"  → {len(articles)} Artikel, {len(relevant)} relevant & aktuell (≤{MAX_AGE_HOURS}h)")
         for a in relevant:
             if is_german(a):
