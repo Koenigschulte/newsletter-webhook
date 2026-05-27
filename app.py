@@ -86,8 +86,9 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(500, {"error": str(e), "detail": body})
             except Exception as e:
                 self._json(500, {"error": str(e)})
-        elif self.path in ("/preview/ds", "/preview/ki"):
-            topic = self.path.split("/")[-1]
+        elif self.path.split("?")[0] in ("/preview/ds", "/preview/ki"):
+            clean_path = self.path.split("?")[0]
+            topic = clean_path.split("/")[-1]
             # Token-Auth via Query-Parameter: /preview/ds?token=...
             token_param = ""
             if "?" in self.path:
