@@ -187,8 +187,13 @@ def is_relevant(article, keywords):
     # Werbeanzeigen rausfiltern
     if any(title_lower.startswith(bl) for bl in BLOCKLIST):
         return False
-    text = (article["title"] + " " + article["summary"]).lower()
-    return any(kw in text for kw in keywords)
+    # Mindestens 1 Keyword im Titel ODER 2+ Keywords im Gesamttext
+    title_matches = sum(1 for kw in keywords if kw in title_lower)
+    if title_matches >= 1:
+        return True
+    full_text = (article["title"] + " " + article["summary"]).lower()
+    full_matches = sum(1 for kw in keywords if kw in full_text)
+    return full_matches >= 2
 
 
 def translate_to_german(title, summary):
