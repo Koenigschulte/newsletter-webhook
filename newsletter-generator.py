@@ -5,7 +5,7 @@ Ruft RSS-Feeds ab, baut HTML, sendet via Webhook.
 Aufruf: python3 newsletter-generator.py ds   (Digitale Souveränität)
          python3 newsletter-generator.py ki   (Künstliche Intelligenz)
 """
-import sys, os, json, datetime, urllib.request, urllib.error
+import sys, os, json, datetime, urllib.request, urllib.error, re
 import xml.etree.ElementTree as ET
 from html import unescape
 
@@ -145,16 +145,18 @@ def is_german(article):
 def translate_to_german(title, summary):
     """Übersetzt Titel und Zusammenfassung ins Deutsche via Claude Haiku."""
     if not ANTHROPIC_KEY:
+        log("  Übersetzung: ANTHROPIC_API_KEY nicht gesetzt")
         return title, summary
     try:
         prompt = (
-            f"Übersetze folgendes ins Deutsche. Antworte NUR mit JSON, kein Text davor oder danach: "
-            f'{{\"title\": \"...\", \"summary\": \"...\"}}\n\n'
-            f"Titel: {title}\nZusammenfassung: {summary}"
+            f"Übersetze ins Deutsche. Antworte NUR in diesem exakten Format:\n"
+            f"TITEL: [übersetzter Titel]\n"
+            f"TEXT: [übersetzte Zusammenfassung]\n\n"
+            f"Titel: {title}\nText: {summary}"
         )
         payload = json.dumps({
             "model": "claude-haiku-4-5",
-            "max_tokens": 600,
+            "max_tokens": 800,
             "messages": [{"role": "user", "content": prompt}],
         }).encode()
         req = urllib.request.Request(
@@ -167,14 +169,38 @@ def translate_to_german(title, summary):
         with urllib.request.urlopen(req, timeout=20) as r:
             resp = json.loads(r.read())
             text = resp["content"][0]["text"].strip()
-            # JSON aus Antwort extrahieren
-            start = text.find("{")
-            end   = text.rfind("}") + 1
-            data  = json.loads(text[start:end])
-            return data.get("title", title), data.get("summary", summary)
+            t_match = re.search(r"TITEL:\s*(.+)", text)
+            s_match = re.search(r"TEXT:\s*([\s\S]+)", text)
+            new_title   = t_match.group(1).strip() if t_match else title
+            new_summary = s_match.group(1).strip() if s_match else summary
+            log(f"  Übersetzung OK: {new_title[:50]}…")
+            return new_title, new_summary
     except Exception as e:
         log(f"  ÜBERSETZUNG FEHLER ({type(e).__name__}): {e}")
         return title, summary
+
+
+def is_recent(pub_str, max_age_hours=48):
+    """Nur Artikel der letzten 48 Stunden."""
+    if not pub_str:
+        return True
+    now = datetime.datetime.now(datetime.timezone.utc)
+    formats = [
+        "%Y-%m-%d",
+        "%a, %d %b %Y %H:%M:%S %z",
+        "%a, %d %b %Y %H:%M:%S GMT",
+        "%Y-%m-%dT%H:%M:%S%z",
+        "%Y-%m-%dT%H:%M:%SZ",
+    ]
+    for fmt in formats:
+        try:
+            dt = datetime.datetime.strptime(pub_str.strip()[:len(fmt)+5], fmt)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=datetime.timezone.utc)
+            return (now - dt).total_seconds() < max_age_hours * 3600
+        except Exception:
+            continue
+    return True  # Datum nicht parsebar → trotzdem nehmen
 
 
 def is_relevant(article, keywords):
@@ -285,7 +311,7 @@ def main():
     for lang, feed_url in cfg["feeds"]:
         log(f"  Lade [{lang.upper()}]: {feed_url}")
         articles = fetch_feed(feed_url)
-        relevant = [a for a in articles if is_relevant(a, cfg["keywords"])]
+        relevant = [a for a in articles if is_relevant(a, cfg["keywords"]) and is_recent(a.get("pub", ""))]
         log(f"  → {len(articles)} Artikel, {len(relevant)} relevant")
         for a in relevant:
             if is_german(a):
