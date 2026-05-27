@@ -438,7 +438,14 @@ def main():
             "article_count": len(top),
             "anthropic_key": bool(ANTHROPIC_KEY),
             "articles": [
-                {"title": a["title"], "pub": a.get("pub",""), "pub_raw": a.get("pub_raw","")[:30], "link": a["link"][:60]}
+                {
+                    "title":          a["title"],
+                    "pub":            a.get("pub",""),
+                    "link":           a["link"][:60],
+                    "zusammenfassung": a.get("zusammenfassung","")[:150],
+                    "erkenntnis":     a.get("erkenntnis","")[:150],
+                    "problem":        a.get("problem","")[:150],
+                }
                 for a in top
             ]
         }
