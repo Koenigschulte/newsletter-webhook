@@ -218,20 +218,29 @@ def call_claude(prompt, max_tokens=600):
         return None
 
 
-def expand_summary(title, summary, topic_context):
-    """Schreibt eine ausführliche deutsche Zusammenfassung (4-5 Sätze)."""
+def enrich_article(title, summary, topic_context):
+    """Erstellt Zusammenfassung, Erkenntnis und Problem auf Deutsch via Claude."""
     prompt = (
         f"Du schreibst einen Newsletter über {topic_context}.\n"
-        f"Schreibe eine ausführliche deutsche Zusammenfassung (4-5 vollständige Sätze) für diesen Artikel.\n"
-        f"Erkläre den Kontext, die Bedeutung und die Relevanz für das Thema.\n"
-        f"Antworte NUR mit der Zusammenfassung, kein Titel, keine Einleitung.\n\n"
+        f"Analysiere diesen Artikel und antworte NUR in diesem exakten Format:\n\n"
+        f"ZUSAMMENFASSUNG: [4-5 Sätze: Was ist passiert? Wer ist beteiligt? Welche Details sind wichtig?]\n"
+        f"ERKENNTNIS: [2-3 Sätze: Was bedeutet das strategisch? Was sollte der Leser mitnehmen?]\n"
+        f"PROBLEM: [2-3 Sätze: Welches konkrete Problem oder Risiko steckt dahinter?]\n\n"
         f"Titel: {title}\n"
         f"Verfügbarer Text: {summary}"
     )
-    result = call_claude(prompt, max_tokens=500)
-    if result:
-        log(f"  ✓ Zusammenfassung erweitert: {len(result)} Zeichen")
-    return result or summary
+    result = call_claude(prompt, max_tokens=700)
+    if not result:
+        return {"zusammenfassung": summary, "erkenntnis": "", "problem": ""}
+    z = re.search(r"ZUSAMMENFASSUNG:\s*([\s\S]+?)(?=ERKENNTNIS:|$)", result)
+    e = re.search(r"ERKENNTNIS:\s*([\s\S]+?)(?=PROBLEM:|$)", result)
+    p = re.search(r"PROBLEM:\s*([\s\S]+?)$", result)
+    log(f"  ✓ Artikel angereichert: {title[:50]}")
+    return {
+        "zusammenfassung": z.group(1).strip() if z else summary,
+        "erkenntnis":      e.group(1).strip() if e else "",
+        "problem":         p.group(1).strip() if p else "",
+    }
 
 
 def translate_to_german(title, summary):
@@ -263,13 +272,17 @@ CSS = """body{font-family:-apple-system,Arial,sans-serif;max-width:680px;margin:
 .header h1{margin:0;font-size:22px}
 .header p{margin:8px 0 0;opacity:.75;font-size:13px}
 .content{padding:20px 16px}
-.article{background:white;border-radius:10px;margin-bottom:18px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08)}
-.article-body{padding:16px 18px 18px}
-.article-body h2{margin:0 0 10px;font-size:16px;line-height:1.4}
+.article{background:white;border-radius:10px;margin-bottom:22px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.article-body{padding:18px 20px 20px}
+.article-body h2{margin:0 0 12px;font-size:17px;line-height:1.4}
 .article-body h2 a{color:{header_color};text-decoration:none}
-.summary{color:#444;font-size:14px;line-height:1.65;margin:0 0 12px}
-.insight{background:{insight_bg};border-left:3px solid {accent};padding:10px 14px;font-size:13px;color:#333;border-radius:0 6px 6px 0}
-.read-more{display:inline-block;margin-top:12px;color:{accent};font-size:13px;text-decoration:none;font-weight:500}
+.section-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:{accent};margin:14px 0 4px}
+.summary{color:#333;font-size:14px;line-height:1.7;margin:0 0 4px}
+.box{border-left:3px solid {accent};padding:10px 14px;font-size:13px;line-height:1.65;border-radius:0 6px 6px 0;margin-bottom:8px}
+.box-erkenntnis{background:{insight_bg};color:#1a3a1a}
+.box-problem{background:#fff4f4;color:#5a1a1a;border-color:#e05555}
+.meta{color:#999;font-size:12px;margin-top:10px}
+.read-more{display:inline-block;margin-top:8px;color:{accent};font-size:13px;text-decoration:none;font-weight:600}
 .footer{text-align:center;padding:24px 16px;color:#999;font-size:12px;border-top:1px solid #e0e0e0}"""
 
 
@@ -281,15 +294,22 @@ def build_html(topic, articles, today):
 
     cards = ""
     for a in articles:
-        pub = f" · {a['pub']}" if a.get("pub") else ""
-        summary = a["summary"] if a["summary"] else "Vollständigen Artikel lesen."
+        pub = f"{a['pub']}" if a.get("pub") else ""
+        zusammenfassung = a.get("zusammenfassung") or a.get("summary") or "Vollständigen Artikel lesen."
+        erkenntnis = a.get("erkenntnis", "")
+        problem    = a.get("problem", "")
+        erkenntnis_block = f'<div class="section-label">💡 Erkenntnis</div><div class="box box-erkenntnis">{erkenntnis}</div>' if erkenntnis else ""
+        problem_block    = f'<div class="section-label">⚠️ Problem</div><div class="box box-problem">{problem}</div>' if problem else ""
         cards += f"""
   <div class="article">
     <div class="article-body">
       <h2><a href="{a['link']}" target="_blank">{a['title']}</a></h2>
-      <p class="summary">{summary}</p>
-      <div class="insight">📅 Veröffentlicht{pub} — <a href="{a['link']}" target="_blank" style="color:inherit">{a['link'][:60]}…</a></div>
-      <a class="read-more" href="{a['link']}" target="_blank">Weiterlesen →</a>
+      <div class="section-label">📋 Zusammenfassung</div>
+      <p class="summary">{zusammenfassung}</p>
+      {erkenntnis_block}
+      {problem_block}
+      <p class="meta">📅 {pub} — <a href="{a['link']}" target="_blank" style="color:#999">{a['link'][:55]}…</a></p>
+      <a class="read-more" href="{a['link']}" target="_blank">Vollständigen Artikel lesen →</a>
     </div>
   </div>"""
 
@@ -389,12 +409,20 @@ def main():
     top = unique[:MAX_ARTICLES]
     log(f"  Gesamt: {len(unique)} Artikel, nehme {len(top)}")
 
-    # Zusammenfassungen mit Claude ausführlich ausformulieren
+    # Artikel mit Claude anreichern (Zusammenfassung, Erkenntnis, Problem)
     if ANTHROPIC_KEY:
         topic_context = "digitale Souveränität, Datenschutz und EU-Regulierung" if topic == "ds" else "Künstliche Intelligenz, LLMs und KI-Entwicklungen"
         for a in top:
-            log(f"  Erweitere Zusammenfassung: {a['title'][:50]}…")
-            a["summary"] = expand_summary(a["title"], a["summary"], topic_context)
+            log(f"  Reichere an: {a['title'][:50]}…")
+            enriched = enrich_article(a["title"], a["summary"], topic_context)
+            a["zusammenfassung"] = enriched["zusammenfassung"]
+            a["erkenntnis"]      = enriched["erkenntnis"]
+            a["problem"]         = enriched["problem"]
+    else:
+        for a in top:
+            a["zusammenfassung"] = a.get("summary", "")
+            a["erkenntnis"]      = ""
+            a["problem"]         = ""
 
     if not top:
         log("WARNUNG: Keine relevanten Artikel gefunden")
