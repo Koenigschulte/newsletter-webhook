@@ -288,10 +288,16 @@ def send(subject, html):
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 
+DRY_RUN = "--dry-run" in sys.argv
+
 def log(msg):
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{ts}] {msg}"
-    print(line, flush=True)
+    # Im dry-run auf stderr damit stdout sauber für JSON bleibt
+    if DRY_RUN:
+        print(line, file=sys.stderr, flush=True)
+    else:
+        print(line, flush=True)
     try:
         with open(LOG, "a") as f:
             f.write(line + "\n")
@@ -302,7 +308,7 @@ def log(msg):
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
-    dry_run = "--dry-run" in sys.argv
+    dry_run = DRY_RUN
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
 
     if not args or args[0] not in TOPICS:
