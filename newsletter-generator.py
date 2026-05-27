@@ -180,7 +180,13 @@ def is_german(article):
     return len(words & german_words) >= 2
 
 
+BLOCKLIST = ["anzeige:", "sponsored:", "werbung:", "advertisement:", "deals:", "angebot:"]
+
 def is_relevant(article, keywords):
+    title_lower = article["title"].lower()
+    # Werbeanzeigen rausfiltern
+    if any(title_lower.startswith(bl) for bl in BLOCKLIST):
+        return False
     text = (article["title"] + " " + article["summary"]).lower()
     return any(kw in text for kw in keywords)
 
