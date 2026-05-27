@@ -58,6 +58,7 @@ class Handler(BaseHTTPRequestHandler):
             import os
             self._json(200, {
                 "ok": True,
+                "version": "2026-05-27-v2",
                 "anthropic_key_set": bool(os.environ.get("ANTHROPIC_API_KEY", "")),
                 "azure_client_id_set": bool(CLIENT_ID),
             })
