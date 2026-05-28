@@ -183,14 +183,22 @@ def is_german(article):
 BLOCKLIST = ["anzeige:", "sponsored:", "werbung:", "advertisement:", "deals:", "angebot:"]
 PAYWALL   = ["(g+)", "⊕", "[premium]", "[+]"]
 
+# Titel-Sperrliste: klar thematisch Off-Topic für beide Newsletter
+NEGLIST_TITLE = [
+    "traktor", "landmaschine", "mähdrescher", "elektro-traktor", "e-traktor",
+    "rasenmäher", "agrarmaschine", "landwirtschaftsmaschine",
+]
+
 # Kern-Keywords: mindestens eines muss im Volltext stehen wenn kein Keyword im Titel
+# Bewusst eng gehalten — "souveränität" allein zu breit (erfasst Energie-/Agrar-Souveränität)
 CORE_KW = {
     "ds": {
-        "souveränität", "sovereignty", "dsgvo", "gdpr", "datenschutz", "privacy",
+        "digitale souveränität", "datensouveränität", "technologische souveränität",
+        "digital sovereignty", "dsgvo", "gdpr", "datenschutz", "privacy",
         "datenpanne", "datenleck", "überwachung", "surveillance", "digital rights",
         "cloud act", "whistleblow", "schrems", "datenspeicherung", "datenweitergabe",
         "digitalgesetz", "dma", "dsa", "noyb", "vendor lock", "gaia-x",
-        "datenschutzbehörde", "datenschutzbeauftragter", "datenschutzrecht",
+        "datenschutzbehörde", "datenschutzrecht", "personenbezogen",
     },
     "ki": {
         "künstliche intelligenz", "artificial intelligence", "llm", "gpt", "claude",
@@ -207,6 +215,9 @@ def is_relevant(article, keywords, topic=""):
         return False
     # Bezahlartikel rausfiltern
     if any(pw in title_lower for pw in PAYWALL):
+        return False
+    # Klar Off-Topic Titel blockieren (gilt auch bei Keyword-Match im Titel)
+    if any(neg in title_lower for neg in NEGLIST_TITLE):
         return False
     # Mindestens 1 Keyword im Titel → direkt relevant
     title_matches = sum(1 for kw in keywords if kw in title_lower)
