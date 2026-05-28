@@ -4,7 +4,7 @@ Newsletter Generator — Hetzner Server
 Ruft RSS-Feeds ab, baut HTML, sendet via Webhook.
 Aufruf: python3 newsletter-generator.py ds|ki [--dry-run]
 """
-import sys, os, json, datetime, urllib.request, urllib.error, re
+import sys, os, json, datetime, urllib.request, urllib.error, re, email.utils
 import xml.etree.ElementTree as ET
 from html import unescape
 
@@ -89,13 +89,19 @@ def parse_date(pub_str):
     if not pub_str:
         return None
     s = pub_str.strip()
+    # RFC 2822 (inkl. named timezones wie CEST, CET, GMT)
+    try:
+        dt = email.utils.parsedate_to_datetime(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=datetime.timezone.utc)
+        return dt
+    except Exception:
+        pass
+    # ISO 8601 / Atom-Formate
     formats = [
         "%Y-%m-%dT%H:%M:%S%z",
         "%Y-%m-%dT%H:%M:%SZ",
         "%Y-%m-%dT%H:%M:%S+00:00",
-        "%a, %d %b %Y %H:%M:%S %z",
-        "%a, %d %b %Y %H:%M:%S GMT",
-        "%a, %d %b %Y %H:%M:%S +0000",
         "%Y-%m-%d",
     ]
     for fmt in formats:
