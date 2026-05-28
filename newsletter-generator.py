@@ -347,16 +347,16 @@ def build_html(topic, articles, today):
         zusammenfassung = a.get("zusammenfassung") or a.get("summary") or "Vollständigen Artikel lesen."
         erkenntnis = a.get("erkenntnis", "")
         problem    = a.get("problem", "")
-        erkenntnis_block = f'<div class="section-label">💡 Erkenntnis</div><div class="box box-erkenntnis">{erkenntnis}</div>' if erkenntnis else ""
         problem_block    = f'<div class="section-label">⚠️ Problem</div><div class="box box-problem">{problem}</div>' if problem else ""
+        erkenntnis_block = f'<div class="section-label">💡 Erkenntnis</div><div class="box box-erkenntnis">{erkenntnis}</div>' if erkenntnis else ""
         cards += f"""
   <div class="article">
     <div class="article-body">
       <h2><a href="{a['link']}" target="_blank">{a['title']}</a></h2>
       <div class="section-label">📋 Zusammenfassung</div>
       <p class="summary">{zusammenfassung}</p>
-      {erkenntnis_block}
       {problem_block}
+      {erkenntnis_block}
       <p class="meta">📅 {pub} — <a href="{a['link']}" target="_blank" style="color:#999">{a['link'][:55]}…</a></p>
       <a class="read-more" href="{a['link']}" target="_blank">Vollständigen Artikel lesen →</a>
     </div>
